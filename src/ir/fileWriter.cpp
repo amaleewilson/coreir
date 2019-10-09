@@ -20,19 +20,7 @@ bool endsWith(const string &str, const string &suffix) {
   return ((str.size() >= suffix.size()) &&
             (str.compare(str.size()-suffix.size(), suffix.size(), suffix) == 0));
 }
-  /*
-string instStr(Wireable* wire) {
-  Select* child;
-  Wireable* parent = wire;
 
-  while (isa<Select>(parent)) {
-    child = cast<Select>(parent);
-    parent = child->getParent();
-  }
-
-  return parent->toString() == "self" ? child->toString() : parent->toString();
-}
-  */
 string instStr(SelectPath wire) {
   if (wire[0] == "self") {
     return wire[0] + "." + wire[1];
@@ -116,7 +104,7 @@ bool saveToDot(Module* m, std::ostream& fout) {
   return ModuleToDot(m, fout);
 }
 
-bool saveToFile(Namespace* ns, string filename,Module* top) {
+bool saveToFile(Namespace* ns, string filename, Module* top) {
   Context* c = ns->getContext();
   ASSERT(endsWith(filename, ".json"),filename + "Needs to be a json file");
   std::ofstream file(filename);
@@ -127,8 +115,14 @@ bool saveToFile(Namespace* ns, string filename,Module* top) {
     c->error(e);
     return false;
   }
+  vector<string> namespaces;
+  for (auto ns : c->getNamespaces()) {
+    if (ns.first !="coreir" && ns.first !="corebit") {
+      namespaces.push_back(ns.first);
+    }
+  }
   
-  c->runPasses({"coreirjson"},{ns->getName()});
+  c->runPasses({"coreirjson","cullgraph"},namespaces);
   auto jpass = static_cast<Passes::CoreIRJson*>(c->getPassManager()->getAnalysisPass("coreirjson"));
   string topRef = "";
   if (top) {
