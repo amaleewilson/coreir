@@ -23,7 +23,8 @@ string sanatizeParamString(string name) {
   out.erase(std::remove(out.begin(),out.end(),'['),out.end());
   out.erase(std::remove(out.begin(),out.end(),']'),out.end());
   out.erase(std::remove(out.begin(),out.end(),'.'),out.end());
-  return out;
+  out.erase(std::remove(out.begin(),out.end(),' '),out.end());
+  return "\\" + out;
 }
 }
 

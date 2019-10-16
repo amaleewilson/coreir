@@ -55,7 +55,7 @@ std::variant<std::unique_ptr<vAST::Identifier>, std::unique_ptr<vAST::Vector>>
 process_decl(std::unique_ptr<vAST::Identifier> id, Type *type) {
   if (isa<ArrayType>(type)) {
     ArrayType *array_type = cast<ArrayType>(type);
-    ASSERT(array_type->getElemType()->isBaseType(), "Expected Array of Bits");
+    ASSERT(array_type->getElemType()->isBaseType(), "Expected Array of Bits but received" + array_type->toString());
     return std::make_unique<vAST::Vector>(
         std::move(id),
         std::make_unique<vAST::NumericLiteral>(
@@ -193,6 +193,19 @@ Passes::Verilog::compileStringBodyModule(json verilog_json, std::string name,
       name, std::move(ports), definition, std::move(parameters));
 }
 
+namespace {
+inline bool isBit(Type* t) {
+  return t->isBaseType() || isa<NamedType>(t);
+}
+bool isBitOrArrOfBits(Type* t) {
+  if (isBit(t)) return true;
+  if (auto at = dyn_cast<ArrayType>(t)) {
+    return isBit(at->getElemType());
+  }
+  return false;
+}
+}
+
 // Compile a CoreIR record type corresponding to the interface of a module with
 // flattened types into a vector of vAST Ports
 std::vector<std::unique_ptr<vAST::AbstractPort>>
@@ -209,7 +222,11 @@ Passes::Verilog::compilePorts(RecordType *record_type) {
         std::make_unique<vAST::Identifier>(name_str);
 
     Type *type = entry.second;
-
+    if (!isBitOrArrOfBits(type)) {
+      std::cout << "Non flattened type!" << std::endl;
+      std::cout << toString(record_type) << std::endl;
+      ASSERT(false, "Needs to be flattened");
+    }
     vAST::Direction verilog_direction;
     if (type->isInput()) {
       verilog_direction = vAST::INPUT;
