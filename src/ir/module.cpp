@@ -24,7 +24,7 @@ string sanatizeParamString(string name) {
   out.erase(std::remove(out.begin(),out.end(),']'),out.end());
   out.erase(std::remove(out.begin(),out.end(),'.'),out.end());
   out.erase(std::remove(out.begin(),out.end(),' '),out.end());
-  return "\\" + out;
+  return out;
 }
 }
 
@@ -50,6 +50,7 @@ Module::Module(Namespace* ns,std::string name, Type* type,Params modparams, Gene
   for (auto genarg : genargs) {
     this->longname += "__" + genarg.first + sanatizeParamString(genarg.second->toString()) ;
   }
+  this->longname = "\\" + this->longname;
 }
 
 DirectedModule* Module::newDirectedModule() {
