@@ -73,7 +73,6 @@ uint inverted_index(uint outx, uint inx, uint i) {
 Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
 
   Namespace* commonlib = c->newNamespace("commonlib");
-  Namespace* coreirprims = c->getNamespace("coreir");
 
   /////////////////////////////////
   // Commonlib Types
@@ -146,29 +145,29 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
   /////////////////////////////////
   // Commonlib Arithmetic primitives
   //   umin,smin,umax,smax
-	//   uclamp, sclamp
+  //   uclamp, sclamp
   //   abs, absd, MAD
   //   div
   /////////////////////////////////
 
   //Lazy way:
   unordered_map<string,vector<string>> opmap({
-      {"unary",{
-          "abs"
+    {"coreir.unary",{
+      "abs"
     }},
-    {"binary",{
+    {"coreir.binary",{
       "umin","smin","umax","smax",
       "uclamp","sclamp",
       "absd", "div",
     }},
-    {"ternary",{
+    {"commonlib.ternary",{
         "MAD"
     }},
   });
 
   //Add all the generators (with widthparams)
   for (auto tmap : opmap) {
-    TypeGen* tg = coreirprims->getTypeGen(tmap.first);
+    TypeGen* tg = c->getTypeGen(tmap.first);
     for (auto op : tmap.second) {
       commonlib->newGeneratorDecl(op,tg,widthparams);
     }
@@ -263,14 +262,19 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
     def->addInstance("is_pos","coreir.sge",args);
     def->addInstance("mult","coreir.mul",args);
 
-    def->addInstance("negone_const",
-		     "coreir.const",
-		     {{"width",Const::make(c,width)}},
-		     {{"value", Const::make(c, width, -1)}});
-    def->addInstance("zero_const",
-		     "coreir.const",
-		     {{"width",Const::make(c, width)}},
-		     {{"value", Const::make(c, width, 0)}});
+    def->addInstance(
+      "negone_const",
+      "coreir.const",
+      {{"width",Const::make(c,width)}},
+      {{"value", Const::make(c, width, -1)}}
+    );
+
+    def->addInstance(
+      "zero_const",
+      "coreir.const",
+      {{"width",Const::make(c, width)}},
+      {{"value", Const::make(c, width, 0)}}
+    );
 
     // is_pos = in > 0
     def->connect("self.in","is_pos.in0");
@@ -715,7 +719,7 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
       {"wdata", c->BitIn()->Arr(width)},
       {"wen", c->BitIn()},
       {"rdata", c->Bit()->Arr(width)},
-	// Is this just wen delayed by N?
+  // Is this just wen delayed by N?
       {"valid", c->Bit()},
     });
   });
@@ -1113,7 +1117,7 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
 
     uint bitwidth = in_dims[0]; // first element in array is bitwidth
     ASSERT(bitwidth > 0, "The first dimension for the input is interpretted "
-					 "as the bitwidth which was set to " + to_string(bitwidth));
+           "as the bitwidth which was set to " + to_string(bitwidth));
 
     // erase the bitwidth size from vectors
     in_dims.erase(in_dims.begin()); 
@@ -1420,24 +1424,24 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
 
         ///// connect linebuffer outputs /////
         if (has_valid) {
-					// check if we create lbmems or not
-					string valid_chain_str;
-					if (out_dim - in_dim > 0) {
-						// use the last lbmem for valid chaining (note this signal is duplicated among all in_dims)
-						//  recall lbmem naming: lbmem_x_<in2>_<in1>_<in0>
-						string last_lbmem_name = lbmem_prefix;
-						for (int dim_i=num_dims-1; dim_i>=0; dim_i--) {
-							if (dim_i == (int)(num_dims-1)) {
-								last_lbmem_name += "_" + to_string(out_dim-1);
-							} else {
-								last_lbmem_name += "_" + to_string(in_dims[dim_i]-1);
-							}
-						}
-						valid_chain_str = last_lbmem_name + ".valid";
-					} else {
-						valid_chain_str = "self.wen";
-					}
-					def->connect(valid_chain_str, "self.valid_chain");
+          // check if we create lbmems or not
+          string valid_chain_str;
+          if (out_dim - in_dim > 0) {
+            // use the last lbmem for valid chaining (note this signal is duplicated among all in_dims)
+            //  recall lbmem naming: lbmem_x_<in2>_<in1>_<in0>
+            string last_lbmem_name = lbmem_prefix;
+            for (int dim_i=num_dims-1; dim_i>=0; dim_i--) {
+              if (dim_i == (int)(num_dims-1)) {
+                last_lbmem_name += "_" + to_string(out_dim-1);
+              } else {
+                last_lbmem_name += "_" + to_string(in_dims[dim_i]-1);
+              }
+            }
+            valid_chain_str = last_lbmem_name + ".valid";
+          } else {
+            valid_chain_str = "self.wen";
+          }
+          def->connect(valid_chain_str, "self.valid_chain");
 
           // create counters to create valid output (if top-level linebuffer)
           if (is_last_lb == false) {
