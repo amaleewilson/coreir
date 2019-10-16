@@ -33,36 +33,48 @@ bool Passes::CullGraph::runOnContext(Context* c) {
   for (auto mpair : c->getNamespace("corebit")->getModules()) {
     recurse(mpair.second,mused,gused);
   }
-  
-  set<GlobalValue*> toErase;
+  set<TypeGen*> tgused;
+  for (auto gen : gused) {
+    tgused.insert(gen->getTypeGen());
+  }
+
+  set<Module*> mErase;
+  set<Generator*> gErase;
+  set<TypeGen*> tgErase;
   for (auto npair : c->getNamespaces()) {
-    if (nocoreir && (npair.first=="coreir" || npair.first=="corebit")) {
+    auto nsname = npair.first;
+    auto ns = npair.second;
+    if (nocoreir && (nsname=="coreir" || nsname=="corebit")) {
       continue;
     }
-    for (auto gpair : npair.second->getGenerators()) {
-      if (gused.count(gpair.second)==0) {
-        toErase.insert(gpair.second);
-      }
-    }
-    for (auto mpair : npair.second->getModules()) {
+    for (auto mpair : ns->getModules()) {
       if (mused.count(mpair.second)==0 && !mpair.second->isGenerated()) {
-        toErase.insert(mpair.second);
+        mErase.insert(mpair.second);
+      }
+    }
+    for (auto gpair : ns->getGenerators()) {
+      if (gused.count(gpair.second)==0) {
+        gErase.insert(gpair.second);
+      }
+    }
+    for (auto tgpair : ns->getTypeGens()) {
+      if (tgused.count(tgpair.second)==0) {
+        tgErase.insert(tgpair.second);
       }
     }
   }
-  set<GlobalValue*> genToErase;
-  for (auto i : toErase) {
-    if (auto m = dyn_cast<Module>(i)) {
-      m->getNamespace()->eraseModule(m->getName());
-    }
-    else {
-      genToErase.insert(i);
-    }
+
+  //Need to erase in the order Modules, Generators, TypeGens
+  for (auto m : mErase) {
+    m->getNamespace()->eraseModule(m->getName());
   }
-  for (auto i : genToErase) {
-    auto g = cast<Generator>(i);
+  for (auto g : gErase) {
     g->getNamespace()->eraseGenerator(g->getName());
   }
-  return toErase.size()>0;
+  for (auto tg : tgErase) {
+    tg->getNamespace()->eraseTypeGen(tg->getName());
+  }
+
+  return (mErase.size() + gErase.size() + tgErase.size()) > 0;
   
 }

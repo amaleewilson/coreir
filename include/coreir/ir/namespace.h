@@ -52,6 +52,7 @@ class Namespace {
     //This will also delete all modules in generator
     void eraseGenerator(std::string name);
     void eraseModule(std::string name);
+    void eraseTypeGen(std::string name);
 
     Generator* getGenerator(std::string gname);
     Module* getModule(std::string mname);

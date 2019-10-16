@@ -1,5 +1,4 @@
-#ifndef COREIR_CULLGRAPH_HPP_
-#define COREIR_CULLGRAPH_HPP_
+#pragma once
 
 #include "coreir.h"
 // This will recusrively run all the generators and replace module definitions
@@ -13,11 +12,9 @@ class CullGraph : public ContextPass {
   bool nocoreir;
   public :
     static std::string ID;
-    CullGraph(bool nocoreir) : ContextPass(ID + (nocoreir ? "" : "-withcoreir"),"Runs all generators"), nocoreir(nocoreir) {}
+    CullGraph(bool nocoreir) : ContextPass(ID + (nocoreir ? "" : "-withcoreir"),"removes all extraneous modules/generators/typegens from context"), nocoreir(nocoreir) {}
     bool runOnContext(Context* c);
 };
 
 }
 }
-
-#endif

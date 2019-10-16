@@ -133,36 +133,36 @@ bool saveToFile(Namespace* ns, string filename, Module* top) {
 
 }
 
-bool saveToFile(Context* c, string filename, bool nocoreir) {
-  ASSERT(endsWith(filename, ".json"),filename + "Needs to be a json file");
-  std::ofstream file(filename);
-  if (!file.is_open()) {
-    Error e;
-    e.message("Cannot open file " + filename);
-    e.fatal();
-    c->error(e);
-    return false;
-  }
-  if (nocoreir) {
-    vector<string> nss;
-    for (auto nspair : c->getNamespaces()) {
-      if (nspair.first!="coreir" && nspair.first!="corebit") {
-        nss.push_back(nspair.first);
-      }
-    }
-    c->runPasses({"coreirjson"},nss);
-  }
-  else {
-    c->runPassesOnAll({"coreirjson"});
-  }
-  auto jpass = static_cast<Passes::CoreIRJson*>(c->getPassManager()->getAnalysisPass("coreirjson"));
-  string topRef = "";
-  if (c->hasTop()) {
-    topRef = c->getTop()->getRefName();
-  }
-  jpass->writeToStream(file,topRef);
-  return true;
-}
+//bool saveToFile(Context* c, string filename, bool nocoreir) {
+//  ASSERT(endsWith(filename, ".json"),filename + "Needs to be a json file");
+//  std::ofstream file(filename);
+//  if (!file.is_open()) {
+//    Error e;
+//    e.message("Cannot open file " + filename);
+//    e.fatal();
+//    c->error(e);
+//    return false;
+//  }
+//  if (nocoreir) {
+//    vector<string> nss;
+//    for (auto nspair : c->getNamespaces()) {
+//      if (nspair.first!="coreir" && nspair.first!="corebit") {
+//        nss.push_back(nspair.first);
+//      }
+//    }
+//    c->runPasses({"coreirjson"},nss);
+//  }
+//  else {
+//    c->runPassesOnAll({"coreirjson"});
+//  }
+//  auto jpass = static_cast<Passes::CoreIRJson*>(c->getPassManager()->getAnalysisPass("coreirjson"));
+//  string topRef = "";
+//  if (c->hasTop()) {
+//    topRef = c->getTop()->getRefName();
+//  }
+//  jpass->writeToStream(file,topRef);
+//  return true;
+//}
 
 
 }//CoreIR namespace

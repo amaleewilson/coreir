@@ -39,3 +39,14 @@ def test_examples(example):
         #Verify verilog syntax (inlined)
         #res = delegator.run(f"verilator --lint-only examples/build/{name}_inline.v")
         #assert not res.return_code, res.out + res.err
+
+
+def test_serialize():
+        res = delegator.run(f"bin/coreir -i examples/lut5.json -l commonlib -p \"rungenerators; cullgraph\" -a -o examples/build/_lut5.json")
+        assert not res.return_code, res.out + res.err
+
+        res = delegator.run(f"bin/coreir -i examples/build/_lut5.json")
+        assert not res.return_code, res.out + res.err
+
+
+test_serialize()

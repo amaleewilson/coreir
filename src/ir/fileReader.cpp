@@ -71,10 +71,12 @@ bool loadFromFile(Context* c, string filename,Module** top) {
   try {
     file >> j;
     //There are the following dependencies moduleDefs->(all modules/generaors)->typegens->(all Types)->namespaces
+    //typgens can also depend on modules
     //Therefore first load all namespaces
     //Then load all namedtypes (No namedtypegens, only simple named types)
+    //Then Load all Modules
     //Then Load all typegens
-    //Then Load all Modules and Generators
+    //Then Load all Generators
     //Then Load all ModuleDefs
 
     vector<std::pair<Namespace*,json>> nsqueue;
@@ -117,6 +119,44 @@ bool loadFromFile(Context* c, string filename,Module** top) {
         }
       }
     }
+
+    //Saves module declaration and the json representing the module
+    vector<std::pair<Module*,json>> modqueue;
+ 
+    //Create all non-generated modules
+    for (auto nsq : nsqueue) {
+      Namespace* ns = nsq.first;
+      json jns = nsq.second;
+      //Load Modules
+      if (jns.count("modules")) {
+        for (auto jmodmap : jns.at("modules").get<jsonmap>()) {
+          //Figure out type;
+          string jmodname = jmodmap.first;
+          //TODO for now if it already exists, just skip
+          if (ns->hasModule(jmodname)) {
+            //TODO confirm that is has the same everything like genparams 
+            continue;
+          }
+          
+          json jmod = jmodmap.second;
+          checkJson(jmod,{"type"},{"modparams","defaultmodargs","instances","connections","metadata"});
+          Type* t = json2Type(c,jmod.at("type"));
+          Params modparams;
+          if (jmod.count("modparams")) {
+            modparams = json2Params(c,jmod.at("modparams"));
+          }
+          Module* m = ns->newModuleDecl(jmodname,t,modparams);
+          if (jmod.count("defaultmodargs")) {
+            m->addDefaultModArgs(json2Values(c,jmod.at("defaultmodargs")));
+          }
+          if (jmod.count("metadata")) {
+            m->setMetaData(jmod["metadata"]);
+          }
+          modqueue.push_back({m,jmod});
+        }
+      }
+    }
+
 
     //create all typegens
     for (auto jnsmap : j.at("namespaces").get<jsonmap>() ) {
@@ -169,39 +209,9 @@ bool loadFromFile(Context* c, string filename,Module** top) {
       }
     }
     
-    //Saves module declaration and the json representing the module
-    vector<std::pair<Module*,json>> modqueue;
     for (auto nsq : nsqueue) {
       Namespace* ns = nsq.first;
       json jns = nsq.second;
-      //Load Modules
-      if (jns.count("modules")) {
-        for (auto jmodmap : jns.at("modules").get<jsonmap>()) {
-          //Figure out type;
-          string jmodname = jmodmap.first;
-          //TODO for now if it already exists, just skip
-          if (ns->hasModule(jmodname)) {
-            //TODO confirm that is has the same everything like genparams 
-            continue;
-          }
-          
-          json jmod = jmodmap.second;
-          checkJson(jmod,{"type"},{"modparams","defaultmodargs","instances","connections","metadata"});
-          Type* t = json2Type(c,jmod.at("type"));
-          Params modparams;
-          if (jmod.count("modparams")) {
-            modparams = json2Params(c,jmod.at("modparams"));
-          }
-          Module* m = ns->newModuleDecl(jmodname,t,modparams);
-          if (jmod.count("defaultmodargs")) {
-            m->addDefaultModArgs(json2Values(c,jmod.at("defaultmodargs")));
-          }
-          if (jmod.count("metadata")) {
-            m->setMetaData(jmod["metadata"]);
-          }
-          modqueue.push_back({m,jmod});
-        }
-      }
       if (jns.count("generators")) {
         for (auto jgenmap : jns.at("generators").get<jsonmap>()) {
           string genname = jgenmap.first;
