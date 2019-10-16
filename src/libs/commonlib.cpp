@@ -83,7 +83,7 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
   // TypeGens defined in coreirprims
 
   //For MAD
-  coreirprims->newTypeGen(
+  commonlib->newTypeGen(
     "ternary",
     widthparams,
     [](Context* c, Values args) {
@@ -321,7 +321,7 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
   ///////////////////////////////////
 
   Params const_array_args =  {{"type",CoreIRType::make(c)},{"value",c->Int()}};
-  TypeGen* constArrayTG = coreirprims->newTypeGen(
+  TypeGen* constArrayTG = commonlib->newTypeGen(
     "constArrayTG",
     const_array_args,
     [](Context* c, Values args) {
@@ -393,7 +393,7 @@ Namespace* CoreIRLoadLibrary_commonlib(Context* c) {
   /////////////////////////////////
 
   Params reg_array_args =  {{"type",CoreIRType::make(c)},{"has_en",c->Bool()},{"has_clr",c->Bool()},{"has_rst",c->Bool()},{"init",c->Int()}};
-  TypeGen* regArrayTG = coreirprims->newTypeGen(
+  TypeGen* regArrayTG = commonlib->newTypeGen(
     "regArrayTG",
     reg_array_args,
     [](Context* c, Values args) {
