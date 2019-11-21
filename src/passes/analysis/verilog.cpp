@@ -416,19 +416,25 @@ compile_module_body(RecordType *module_type,
 
   for (auto instance : instances) {
     Module *instance_module = instance.second->getModuleRef();
-    std::string module_name = instance_module->getName();
-    if (instance_module->isGenerated()) {
-      if (instance_module->getGenerator()->getMetaData().count("verilog") > 0) {
-        json verilog_json =
-            instance_module->getGenerator()->getMetaData()["verilog"];
-        module_name = make_name(module_name, verilog_json);
-      } else {
-        module_name = instance_module->getLongName();
-      }
-    } else if (instance_module->getMetaData().count("verilog") > 0) {
+    std::string module_name = "";
+    if (instance_module->getMetaData().count("verilog") > 0) {
       json verilog_json = instance_module->getMetaData()["verilog"];
-      module_name = make_name(module_name, verilog_json);
+      if (verilog_json.count("verilog_string") > 0) {
+        module_name = instance_module->getName();
+      }
+      else {
+        module_name = make_name(instance_module->getName(), verilog_json);
+      }
     }
+    else if (instance_module->isGenerated() &&
+      instance_module->getGenerator()->getMetaData().count("verilog") > 0) {
+      json verilog_json = instance_module->getGenerator()->getMetaData()["verilog"];
+      module_name = make_name(instance_module->getName(), verilog_json);
+    }
+    else {
+      module_name = instance_module->getLongName();
+    }
+      
     vAST::Parameters instance_parameters;
     std::string instance_name = instance.first;
     std::map<std::string, std::variant<std::unique_ptr<vAST::Identifier>,

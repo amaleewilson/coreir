@@ -120,9 +120,9 @@ bool PassManager::runPass(Pass* p,vector<string>& pArgs) {
   for (int i=0; i<argc; ++i) {
     argv[i] = &(pArgs[i])[0];
   }
-  if (argc > 1) {
-    p->initialize(argc,argv);
-  }
+  //if (argc > 1) {
+  p->initialize(argc,argv);
+  //}
   delete[] argv;
   bool modified = false;
   switch(p->getKind()) {
