@@ -16,7 +16,7 @@ endif()
 if (STATIC)
     if ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
         set(STATIC_FLAGS "-static-libgcc -static-libstdc++")
-        add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
+#        add_definitions(-D_GLIBCXX_USE_CXX11_ABI=0)
     endif()
 endif()
 
