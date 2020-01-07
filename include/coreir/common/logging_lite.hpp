@@ -11,7 +11,9 @@
 enum LogSeverity {
   INFO = 0,
   WARN = 1,
-  FATAL
+  DEBUG,
+  FATAL,
+  NUM_LOG_LEVELS,
 };
 
 namespace common {
