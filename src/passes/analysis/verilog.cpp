@@ -3,6 +3,28 @@
 #include "coreir/tools/cxxopts.h"
 #include <fstream>
 
+// Unpack variant type and convert to parent type Expression
+std::unique_ptr<vAST::Expression>
+convert_to_expression(std::variant<std::unique_ptr<vAST::Identifier>,
+                                   std::unique_ptr<vAST::Index>> value) {
+  return std::visit([](auto &&value) -> std::unique_ptr<vAST::Expression> {
+    return std::move(value); 
+  }, value);
+}
+
+// Unpack variant type and convert to assign variant type
+std::variant<std::unique_ptr<vAST::Identifier>, std::unique_ptr<vAST::Index>,
+             std::unique_ptr<vAST::Slice>> 
+convert_to_assign_target(std::variant<std::unique_ptr<vAST::Identifier>,
+                         std::unique_ptr<vAST::Index>> value) {
+  return std::visit([](auto &&value) ->
+    std::variant<std::unique_ptr<vAST::Identifier>,
+    std::unique_ptr<vAST::Index>, std::unique_ptr<vAST::Slice>> 
+    { return std::move(value); }, 
+    value
+  );
+}
+
 namespace CoreIR {
 
 void Passes::Verilog::initialize(int argc, char **argv) {
@@ -49,13 +71,25 @@ std::unique_ptr<vAST::Expression> convert_value(Value *value) {
   coreir_unreachable();
 }
 
+// unpack named types to get the raw type (so we can check that it's a
+// bit), iteratively because perhaps you can name and named type?
+// This is just a safety check for internal code, to improve performance,
+// we could guard this assert logic behind a macro
+Type *get_raw_type(Type *type) {
+  while (isa<NamedType>(type)) {
+    type = cast<NamedType>(type)->getRaw();
+  }
+  return type;
+}
+
 // Given a signal named `id` and a type `type`, wrap the signal name in a
 // `Vector` node if the signal is of type Array
 std::variant<std::unique_ptr<vAST::Identifier>, std::unique_ptr<vAST::Vector>>
 process_decl(std::unique_ptr<vAST::Identifier> id, Type *type) {
   if (isa<ArrayType>(type)) {
     ArrayType *array_type = cast<ArrayType>(type);
-    ASSERT(array_type->getElemType()->isBaseType(), "Expected Array of Bits");
+    Type *internal_type = get_raw_type(array_type->getElemType());
+    ASSERT(internal_type->isBaseType(), "Expected Array of Bits");
     return std::make_unique<vAST::Vector>(
         std::move(id),
         std::make_unique<vAST::NumericLiteral>(
@@ -63,13 +97,7 @@ process_decl(std::unique_ptr<vAST::Identifier> id, Type *type) {
         std::make_unique<vAST::NumericLiteral>("0"));
   }
 
-  // unpack named types to get the raw type (so we can check that it's a
-  // bit), iteratively because perhaps you can name and named type?
-  // This is just a safety check for internal code, to improve performance,
-  // we could guard this assert logic behind a macro
-  while (isa<NamedType>(type)) {
-    type = cast<NamedType>(type)->getRaw();
-  }
+  type = get_raw_type(type);
   ASSERT(type->isBaseType(), "Expected Bit, or Array of Bits");
 
   // If it's not an Array type, just return the original identifier
@@ -94,7 +122,7 @@ declare_connections(std::map<std::string, Instance *> instances) {
         std::unique_ptr<vAST::Identifier> id =
             std::make_unique<vAST::Identifier>(instance.first + "_" +
                                                port.first);
-        // Can't find a simple way to "promote" a variant type to a
+        // Can't find a simple way to "convert" a variant type to a
         // superset, so we just manually unpack it to call the Wire
         // constructor
         std::visit(
@@ -156,7 +184,8 @@ Passes::Verilog::compileStringBodyModule(json verilog_json, std::string name,
   }
   vAST::Parameters parameters;
   std::set<std::string> parameters_seen;
-  if (module->isGenerated()) {
+  // The wrap primitive has an unused parameter "type" that we ignore
+  if (module->isGenerated() && module->getGenerator()->getName() != "wrap") {
     for (auto parameter : module->getGenerator()->getDefaultGenArgs()) {
       parameters.push_back(
           std::pair(std::make_unique<vAST::Identifier>(parameter.first),
@@ -200,11 +229,6 @@ Passes::Verilog::compilePorts(RecordType *record_type) {
   std::vector<std::unique_ptr<vAST::AbstractPort>> ports;
   for (auto entry : record_type->getRecord()) {
     std::string name_str = entry.first;
-    if (this->verilator_debug) {
-        // FIXME: Hack to get comment into port name, we need to design a way
-        // to attach comments to expressions
-        name_str += "/*verilator public*/";
-    }
     std::unique_ptr<vAST::Identifier> name =
         std::make_unique<vAST::Identifier>(name_str);
 
@@ -220,9 +244,17 @@ Passes::Verilog::compilePorts(RecordType *record_type) {
     } else {
       ASSERT(false, "Not implemented for type = " + toString(type));
     }
-
-    ports.push_back(std::make_unique<vAST::Port>(
-        process_decl(std::move(name), type), verilog_direction, vAST::WIRE));
+    std::unique_ptr<vAST::Port> port = std::make_unique<vAST::Port>(
+            process_decl(std::move(name), type), verilog_direction, vAST::WIRE);
+    if (this->verilator_debug) {
+      // FIXME: Hack to get comment into port decl, we need to add support
+      // attaching comments to expressions
+      std::string port_str = port->toString();
+      port_str += "/*verilator public*/";
+      ports.push_back(std::make_unique<vAST::StringPort>(port_str));
+    } else {
+      ports.push_back(std::move(port));
+    }
   };
   return ports;
 }
@@ -320,21 +352,25 @@ build_connection_map(std::vector<Connection> connections,
 }
 
 // Join select path fields by "_" (ignoring intial self if present)
-std::string convert_to_verilog_connection(Wireable *value) {
+std::variant<std::unique_ptr<vAST::Identifier>, std::unique_ptr<vAST::Index>>
+convert_to_verilog_connection(Wireable *value) {
   SelectPath select_path = value->getSelectPath();
   if (select_path.front() == "self") {
     select_path.pop_front();
   }
   std::string connection_name = "";
-  for (auto item : select_path) {
+  for (uint i = 0; i < select_path.size(); i++) {
+    auto item = select_path[i];
     if (isNumber(item)) {
-      item = "[" + item + "]";
+      ASSERT(i == select_path.size() - 1, "Assumed flattened types have array index as last element in select path");
+      return std::make_unique<vAST::Index>(vAST::make_id(connection_name),
+                                           vAST::make_num(item));
     } else if (connection_name != "") {
       connection_name += "_";
     }
     connection_name += item;
   }
-  return connection_name;
+  return vAST::make_id(connection_name);
 }
 
 // For each output of the current module definition, emit a statement of the
@@ -355,10 +391,8 @@ void assign_module_outputs(
       std::vector<std::unique_ptr<vAST::Expression>> args;
       args.resize(entries.size());
       for (auto entry : entries) {
-        std::string connection_name =
-            convert_to_verilog_connection(entry.source);
         args[entry.index] =
-            (std::make_unique<vAST::Identifier>(connection_name));
+            convert_to_expression(convert_to_verilog_connection(entry.source));
       }
       std::reverse(args.begin(), args.end());
       std::unique_ptr<vAST::Concat> concat =
@@ -367,11 +401,10 @@ void assign_module_outputs(
           std::make_unique<vAST::Identifier>(port.first), std::move(concat)));
     } else {
       // Regular (possibly bulk) connection
-      std::string connection_name =
-          convert_to_verilog_connection(entries[0].source);
       body.push_back(std::make_unique<vAST::ContinuousAssign>(
           std::make_unique<vAST::Identifier>(port.first),
-          std::make_unique<vAST::Identifier>(connection_name)));
+          convert_to_expression(convert_to_verilog_connection(entries[0].source))
+      ));
     }
   }
 }
@@ -385,10 +418,9 @@ void assign_inouts(
     if (connection.first->getType()->isInOut() ||
         connection.second->getType()->isInOut()) {
       body.push_back(std::make_unique<vAST::ContinuousAssign>(
-          std::make_unique<vAST::Identifier>(
-              convert_to_verilog_connection(connection.first)),
-          std::make_unique<vAST::Identifier>(
-              convert_to_verilog_connection(connection.second))));
+              convert_to_assign_target(convert_to_verilog_connection(connection.first)),
+              convert_to_expression(convert_to_verilog_connection(connection.second))
+       ));
     };
   };
 }
@@ -424,11 +456,7 @@ compile_module_body(RecordType *module_type,
     }
     vAST::Parameters instance_parameters;
     std::string instance_name = instance.first;
-    std::map<std::string, std::variant<std::unique_ptr<vAST::Identifier>,
-                                       std::unique_ptr<vAST::Index>,
-                                       std::unique_ptr<vAST::Slice>,
-                                       std::unique_ptr<vAST::Concat>>>
-        verilog_connections;
+    std::map<std::string, std::unique_ptr<vAST::Expression>> verilog_connections;
     for (auto port :
          cast<RecordType>(instance_module->getType())->getRecord()) {
       if (!port.second->isInput()) {
@@ -447,10 +475,8 @@ compile_module_body(RecordType *module_type,
         std::vector<std::unique_ptr<vAST::Expression>> args;
         args.resize(entries.size());
         for (auto entry : entries) {
-          std::string connection_name =
-              convert_to_verilog_connection(entry.source);
-          args[entry.index] =
-              std::make_unique<vAST::Identifier>(connection_name);
+          args[entry.index] = 
+              convert_to_expression(convert_to_verilog_connection(entry.source));
         }
         std::reverse(args.begin(), args.end());
         std::unique_ptr<vAST::Concat> concat =
@@ -459,10 +485,10 @@ compile_module_body(RecordType *module_type,
             std::make_pair(port.first, std::move(concat)));
         // Otherwise we just use the entry in the connection map
       } else {
-        std::string connection_name =
-            convert_to_verilog_connection(entries[0].source);
         verilog_connections.insert(std::make_pair(
-            port.first, std::make_unique<vAST::Identifier>(connection_name)));
+            port.first,
+            convert_to_expression(convert_to_verilog_connection(entries[0].source))
+            ));
       }
     }
     // Handle module arguments
@@ -475,7 +501,9 @@ compile_module_body(RecordType *module_type,
     }
     // Handle generator arguments
     if (instance_module->isGenerated() &&
-        instance_module->getGenerator()->getMetaData().count("verilog") > 0) {
+        instance_module->getGenerator()->getMetaData().count("verilog") > 0 &&
+        // Ignore wrap "type" parameter
+        instance_module->getGenerator()->getName() != "wrap") {
       for (auto parameter : instance.second->getModuleRef()->getGenArgs()) {
         instance_parameters.push_back(
             std::pair(std::make_unique<vAST::Identifier>(parameter.first),
