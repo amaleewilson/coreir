@@ -10,8 +10,9 @@
 
 enum LogSeverity {
   INFO = 0,
-  DEBUG,
+  WARN = 1,
   FATAL,
+  DEBUG,
   NUM_LOG_LEVELS,
 };
 
