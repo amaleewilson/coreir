@@ -384,8 +384,59 @@ Namespace* CoreIRLoadHeader_memory(Context* c) {
     def->connect("self.ren","readreg.en");
   });
 
-  
+
+  //Creating a synchronous Ram
+  Params sramGenParams({{"width",c->Int()},{"depth",c->Int()}});
+  auto sramFun = [](Context* c, Values genargs) {
+    int width = genargs.at("width")->get<int>();
+    int depth = genargs.at("depth")->get<int>();
+    int awidth = std::max((int) ceil(std::log2(depth)), 1);
+    return c->Record({
+      {"clk",c->Named("coreir.clkIn")},
+      {"wdata",c->BitIn()->Arr(width)},
+      {"waddr",c->BitIn()->Arr(awidth)},
+      {"wen",c->BitIn()},
+      {"rdata",c->Bit()->Arr(width)},
+      {"raddr",c->BitIn()->Arr(awidth)}
+    });
+  };
+  TypeGen* sramTypeGen = memory->newTypeGen("SyncRamType",sramGenParams,sramFun);
+
+  auto sram = memory->newGeneratorDecl("SyncRam", sramTypeGen, sramGenParams);
+  {
+    //SyncRam
+    json vjson;
+    vjson["interface"] = {
+      "input clk",
+      "input [width-1:0] wdata",
+      "input [$clog2(depth)-1:0] waddr",
+      "input wen",
+      "output reg [width-1:0] rdata",
+      "input [$clog2(depth)-1:0] raddr"
+    };
+    vjson["definition"] = ""
+    "  reg [width-1:0] data[depth-1:0];\n"
+    "  always @(posedge clk) begin\n"
+    "    if (wen) begin\n"
+    "      data[waddr] <= wdata;\n"
+    "    end\n"
+    "    rdata <= data[raddr];\n"
+    "  end\n";
+    vjson["verilator_debug_definition"] = ""
+    "  reg [width-1:0] data[depth-1:0] /*verilator public*/;\n"
+    "  always @(posedge clk) begin\n"
+    "    if (wen) begin\n"
+    "      data[waddr] <= wdata;\n"
+    "    end\n"
+    "    rdata <= data[raddr];\n"
+    "  end\n";
+
+    sram->getMetaData()["verilog"] = vjson;
+  } 
+
   return memory;
+
+
 }
 
 
